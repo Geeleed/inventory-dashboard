@@ -59,16 +59,30 @@ if uploaded_file is not None:
         st.plotly_chart(fig_forecast, use_container_width=True)
 
     # -------------------------------
-    # EOQ Calculation
+    # EOQ Calculation per Product (รวมทุกแถวต่อสินค้า)
     # -------------------------------
-    if {"Demand", "Cost_per_Order", "Holding_Cost"}.issubset(df.columns):
-        st.subheader("📐 EOQ Calculation")
-        D = df["Demand"].sum()           # ความต้องการรวม
-        S = df["Cost_per_Order"].mean()  # ค่าใช้จ่ายต่อการสั่งซื้อ
-        H = df["Holding_Cost"].mean()    # ต้นทุนการเก็บรักษา
+    required_cols = {"Product", "Stock", "Demand", "Cost_per_Order", "Holding_Cost"}
+    if required_cols.issubset(df.columns):
+        st.subheader("📐 EOQ per Product")
 
-        EOQ = np.sqrt((2 * D * S) / H)
-        st.metric("Economic Order Quantity (EOQ)", f"{EOQ:.2f}")
+        # รวมข้อมูลต่อสินค้า
+        grouped = df.groupby("Product").agg({
+            "Demand": "sum",             # รวมความต้องการ
+            "Stock": "sum",              # รวม Stock ปัจจุบัน
+            "Cost_per_Order": "mean",    # ค่าเฉลี่ย Cost per Order
+            "Holding_Cost": "mean"       # ค่าเฉลี่ย Holding Cost
+        }).reset_index()
+
+        # คำนวณ EOQ
+        grouped["EOQ"] = np.sqrt(2 * grouped["Demand"] * grouped["Cost_per_Order"] / grouped["Holding_Cost"])
+        grouped["EOQ"] = grouped["EOQ"].round()
+
+        st.dataframe(grouped[["Product", "Stock", "EOQ"]])
+
+        # กราฟเปรียบเทียบ Stock กับ EOQ
+        fig_eoq = px.bar(grouped, x="Product", y=["Stock", "EOQ"],
+                         barmode='group', title="เปรียบเทียบ Stock ปัจจุบันกับ EOQ")
+        st.plotly_chart(fig_eoq, use_container_width=True)
 
     # -------------------------------
     # Alert: แนวโน้ม Stockout ใน 7 วัน
