@@ -3,23 +3,29 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-st.title("Inventory Dashboard (Multi-Product per Day + Monthly EOQ Forecast)")
+st.set_page_config(page_title="Inventory Dashboard", layout="wide")
 
-st.text("ใช้ข้อมูล: Date | Product | Stock | Demand | Daily_Usage | Cost_per_Order | Holding_Cost")
+st.title("📦 Inventory Dashboard")
+st.markdown("""
+ระบบติดตามสินค้าคงคลังหลายประเภทต่อวัน พร้อมคำนวณ EOQ และพยากรณ์สินค้าหมด
+""")
 
-st.markdown(
-    """
-    | ฟิลด์               | ความหมาย                              | หน่วย (ตัวอย่าง)                                       |
-    | ------------------ | ------------------------------------- | --------------------------------------------------- |
-    | **Date**           | วันที่ของรายการ                          | YYYY-MM-DD เช่น 2025-01-01                         |
-    | **Product**        | ชื่อหรือรหัสสินค้า                         | ไม่มีหน่วย (text)                                  |
-    | **Stock**          | ปริมาณสินค้าคงเหลือ                      | ชิ้น                                                |    
-    | **Demand**         | ความต้องการของลูกค้าในวันนั้น              | ชิ้น/วัน                                            |
-    | **Daily_Usage**    | ปริมาณที่ถูกขายจริงต่อวัน                    | ชิ้น/วัน                                           |
-    | **Cost_per_Order** | ต้นทุนต่อการสั่งซื้อ 1 ครั้ง                  | บาท/ครั้ง                                         |
-    | **Holding_Cost**   | ต้นทุนการเก็บรักษาสินค้าต่อหน่วยต่อปี          | บาท/ชิ้น/ปี                                       |
-    """
-)
+st.info("ใช้ข้อมูล: Date | Product | Stock | Demand | Daily_Usage | Cost_per_Order | Holding_Cost")
+
+with st.expander("❓ ความหมายของแต่ละฟิลด์"):
+    st.markdown(
+        """
+        | ฟิลด์               | ความหมาย                              | หน่วย (ตัวอย่าง)                                       |
+        | ------------------ | ------------------------------------- | --------------------------------------------------- |
+        | **Date**           | วันที่ของรายการ                          | YYYY-MM-DD เช่น 2025-01-01                         |
+        | **Product**        | ชื่อหรือรหัสสินค้า                         | ไม่มีหน่วย (text)                                  |
+        | **Stock**          | ปริมาณสินค้าคงเหลือ                      | ชิ้น                                                |    
+        | **Demand**         | ความต้องการของลูกค้าในวันนั้น              | ชิ้น/วัน                                            |
+        | **Daily_Usage**    | ปริมาณที่ถูกขายจริงต่อวัน                    | ชิ้น/วัน                                           |
+        | **Cost_per_Order** | ต้นทุนต่อการสั่งซื้อ 1 ครั้ง                  | บาท/ครั้ง                                         |
+        | **Holding_Cost**   | ต้นทุนการเก็บรักษาสินค้าต่อหน่วยต่อปี          | บาท/ชิ้น/ปี                                       |
+        """
+    )
 
 uploaded_file = st.file_uploader("เลือกไฟล์ Excel หรือ CSV", type=["csv", "xlsx"])
 
@@ -31,8 +37,8 @@ if uploaded_file is not None:
         else:
             df = pd.read_excel(uploaded_file)
 
-        st.subheader("ข้อมูลที่อัปโหลด")
-        st.dataframe(df)
+        st.subheader("📄 ข้อมูลที่อัปโหลด")
+        st.dataframe(df, use_container_width=True)
 
         # แปลงค่าที่จำเป็นเป็นตัวเลข
         for col in ["Stock", "Demand", "Daily_Usage", "Cost_per_Order", "Holding_Cost"]:
@@ -43,10 +49,14 @@ if uploaded_file is not None:
         # Inventory Status (ล่าสุดต่อ Product)
         # -------------------------------
         if {"Product", "Stock"}.issubset(df.columns):
-            st.subheader("📦 Inventory Status (Stock ล่าสุด)")
+            st.subheader("📊 Inventory Status (Stock ล่าสุด)")
             latest_stock = df.sort_values("Date").groupby("Product").last().reset_index()
+
             st.dataframe(latest_stock[["Product", "Stock"]])
-            fig_stock = px.bar(latest_stock, x="Product", y="Stock", title="Stock ล่าสุดของแต่ละสินค้า")
+            fig_stock = px.bar(latest_stock, x="Product", y="Stock",
+                                title="Stock ล่าสุดของแต่ละสินค้า",
+                                text="Stock")
+            fig_stock.update_layout(yaxis_title="Stock (ชิ้น)")
             st.plotly_chart(fig_stock, use_container_width=True)
 
         # -------------------------------
@@ -57,43 +67,41 @@ if uploaded_file is not None:
             st.subheader("📐 EOQ per Product & Stock-out Forecast")
 
             grouped = df.groupby("Product").agg({
-                "Stock": "min",           # Stock ล่าสุด
-                "Daily_Usage": "mean",     # ค่าเฉลี่ย Daily_Usage ต่อเดือน
+                "Stock": "min",
+                "Daily_Usage": "mean",
                 "Cost_per_Order": "mean",
                 "Holding_Cost": "mean"
             }).reset_index()
 
-            # คำนวณ Annual Demand
             grouped["Annual_Demand"] = grouped["Daily_Usage"] * 365
-
-            # คำนวณ EOQ
-            grouped["EOQ"] = np.sqrt(2 * grouped["Annual_Demand"] * grouped["Cost_per_Order"] / grouped["Holding_Cost"])
-            grouped["EOQ"] = grouped["EOQ"].round()
-
-            # Days to Stockout
+            grouped["EOQ"] = np.sqrt(2 * grouped["Annual_Demand"] * grouped["Cost_per_Order"] / grouped["Holding_Cost"]).round()
             grouped["Days_to_Stockout"] = np.where(grouped["Daily_Usage"] > 0,
                                                    (grouped["Stock"] / grouped["Daily_Usage"]).round(1),
                                                    np.inf)
 
-            st.dataframe(grouped[["Product", "Stock", "EOQ", "Days_to_Stockout"]])
+            # ตาราง EOQ
+            st.dataframe(grouped[["Product", "Stock", "EOQ", "Days_to_Stockout"]], use_container_width=True)
 
             # กราฟเปรียบเทียบ Stock vs EOQ
             fig_eoq = px.bar(grouped, x="Product", y=["Stock", "EOQ"],
-                             barmode='group', title="เปรียบเทียบ Stock ล่าสุดกับ EOQ")
+                             barmode='group',
+                             title="เปรียบเทียบ Stock ล่าสุดกับ EOQ",
+                             text_auto=True)
+            fig_eoq.update_layout(yaxis_title="จำนวน (ชิ้น)")
             st.plotly_chart(fig_eoq, use_container_width=True)
 
             # -------------------------------
             # Alert: Stock ต่ำกว่า EOQ และใกล้หมด
             # -------------------------------
-            st.subheader("⚠️ Stock-out Alert")
-            for _, row in grouped.iterrows():
-                msg = f"สินค้า {row['Product']} จะหมดใน {row['Days_to_Stockout']} วัน"
-                if row["Stock"] < row["EOQ"]:
-                    st.error(msg + " ⚠️ ต่ำกว่า EOQ! ควรสั่งเพิ่ม")
-                elif row["Days_to_Stockout"] <= 7:
-                    st.warning(msg + " ⚠️ ใกล้หมด")
-                else:
-                    st.success(msg + " ✅ เพียงพอ")
+            with st.expander("⚠️ Stock-out Alert", expanded=True):
+                for _, row in grouped.iterrows():
+                    msg = f"สินค้า {row['Product']} จะหมดใน {row['Days_to_Stockout']} วัน"
+                    if row["Stock"] < row["EOQ"]:
+                        st.error(msg + " ⚠️ ต่ำกว่า EOQ! ควรสั่งเพิ่ม")
+                    elif row["Days_to_Stockout"] <= 7:
+                        st.warning(msg + " ⚠️ ใกล้หมด")
+                    else:
+                        st.success(msg + " ✅ เพียงพอ")
 
             # -------------------------------
             # Monthly EOQ Forecast (2 เดือน)
@@ -110,7 +118,7 @@ if uploaded_file is not None:
                     alert = ""
                     if stock < eoq:
                         alert = "⚠️ ต่ำกว่า EOQ! สั่งเพิ่ม"
-                        stock += eoq  # สมมติว่ามีการสั่ง EOQ เพิ่ม
+                        stock += eoq
                     elif stock <= monthly_usage:
                         alert = "⚠️ ใกล้หมด"
                     forecast_data.append({
@@ -123,4 +131,4 @@ if uploaded_file is not None:
 
             forecast_df = pd.DataFrame(forecast_data)
             st.subheader("📊 Monthly EOQ Forecast")
-            st.dataframe(forecast_df)
+            st.dataframe(forecast_df, use_container_width=True)
