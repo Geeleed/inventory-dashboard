@@ -76,11 +76,11 @@ if uploaded_file is not None:
 
             # แสดงตารางเดียว
             st.dataframe(summary[["Product", "Stock", "Days_to_Stockout", "EOQ", "Alert"]], use_container_width=True)
-
+        
         # -------------------------------
-        # Monthly EOQ Forecast (2 เดือน)
+        # Monthly EOQ Forecast (1 เดือน)
         # -------------------------------
-        months_forecast = 2
+        months_forecast = 1
         forecast_data = []
 
         for _, row in summary.iterrows():
@@ -104,9 +104,8 @@ if uploaded_file is not None:
                 })
 
         forecast_df = pd.DataFrame(forecast_data)
-        st.subheader("📈 Monthly EOQ Forecast")
+        st.subheader("📈 Monthly EOQ Forecast (1 เดือน)")
         st.dataframe(forecast_df, use_container_width=True)
-
 
         # กราฟเปรียบเทียบ Stock vs EOQ
         fig_eoq = px.bar(summary, x="Product", y=["Stock", "EOQ"],
