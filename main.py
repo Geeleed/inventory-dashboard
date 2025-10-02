@@ -46,6 +46,46 @@ if uploaded_file is not None:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
         # -------------------------------
+        # Time series per Product (Multi-select)
+        # -------------------------------
+        st.subheader("📊 Stock, Daily Usage ตามเวลา")
+
+        # ให้เลือกหลายสินค้าได้
+        product_list = df["Product"].unique().tolist()
+        selected_products = st.multiselect("เลือกสินค้า", product_list, default=product_list[:1])
+
+        if selected_products:
+            df_selected = df[df["Product"].isin(selected_products)].sort_values("Date")
+
+            # melt เพื่อให้ plotly แยกเส้นได้ง่าย
+            df_melt = df_selected.melt(
+                id_vars=["Date", "Product"],
+                value_vars=["Stock", "Daily_Usage"],
+                var_name="Metric",
+                value_name="Value"
+            )
+
+            fig_line = px.line(
+                df_melt,
+                x="Date",
+                y="Value",
+                color="Product",
+                line_dash="Metric",   # ใช้เส้นต่างกันตาม Metric
+                title="แนวโน้ม Stock / Daily Usage",
+                markers=True
+            )
+
+            fig_line.update_layout(
+                yaxis_title="จำนวน (ชิ้น)",
+                xaxis_title="วันที่",
+                legend_title="สินค้า / ประเภทข้อมูล"
+            )
+
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.info("👉 กรุณาเลือกสินค้าอย่างน้อย 1 รายการ")
+  
+        # -------------------------------
         # Combined Inventory Summary
         # -------------------------------
         required_cols = {"Product", "Stock", "Daily_Usage", "Cost_per_Order", "Holding_Cost"}
@@ -76,7 +116,15 @@ if uploaded_file is not None:
 
             # แสดงตารางเดียว
             st.dataframe(summary[["Product", "Stock", "Days_to_Stockout", "EOQ", "Alert"]], use_container_width=True)
-        
+
+        # กราฟเปรียบเทียบ Stock vs EOQ
+        fig_eoq = px.bar(summary, x="Product", y=["Stock", "EOQ"],
+                            barmode='group',
+                            title="เปรียบเทียบ Stock ล่าสุดกับ EOQ",
+                            text_auto=True)
+        fig_eoq.update_layout(yaxis_title="จำนวน (ชิ้น)")
+        st.plotly_chart(fig_eoq, use_container_width=True)
+
         # -------------------------------
         # Monthly EOQ Forecast (1 เดือน)
         # -------------------------------
@@ -106,11 +154,3 @@ if uploaded_file is not None:
         forecast_df = pd.DataFrame(forecast_data)
         st.subheader("📈 Monthly EOQ Forecast (1 เดือน)")
         st.dataframe(forecast_df, use_container_width=True)
-
-        # กราฟเปรียบเทียบ Stock vs EOQ
-        fig_eoq = px.bar(summary, x="Product", y=["Stock", "EOQ"],
-                            barmode='group',
-                            title="เปรียบเทียบ Stock ล่าสุดกับ EOQ",
-                            text_auto=True)
-        fig_eoq.update_layout(yaxis_title="จำนวน (ชิ้น)")
-        st.plotly_chart(fig_eoq, use_container_width=True)
